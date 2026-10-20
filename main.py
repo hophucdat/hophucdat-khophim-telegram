@@ -269,9 +269,8 @@ async def save_episode_final(message: types.Message, state: FSMContext):
 
 # ==================== PHẦN 3: FASTAPI WEBHOOK CONFIG ====================
 
-# Ưu tiên lấy token và domain từ biến môi trường của Vercel, nếu không có sẽ lấy giá trị dự phòng
 STREAM_BOT_TOKEN = os.getenv("STREAM_BOT_TOKEN", "8493489068:AAFnFbMxQByA_96Zor86LzicWHOSRRaUa5M")
-WEBHOOK_DOMAIN = os.getenv("WEBHOOK_DOMAIN", "https://hophucdat-khophim-telegram.vercel.app")
+WEBHOOK_DOMAIN = os.getenv("WEBHOOK_DOMAIN", "https://hophucdat-khophim-telegram-4vnb.vercel.app")
 WEBHOOK_PATH = f"/webhook/{STREAM_BOT_TOKEN}"
 WEBHOOK_URL = WEBHOOK_DOMAIN + WEBHOOK_PATH
 
@@ -282,19 +281,29 @@ bot = Bot(token=STREAM_BOT_TOKEN)
 dp = Dispatcher()
 dp.include_router(router)
 
+# Cờ kiểm tra và hàm đảm bảo webhook luôn được gắn tự động
+webhook_registered = False
+
+async def ensure_webhook():
+    global webhook_registered
+    if not webhook_registered:
+        try:
+            await bot.set_webhook(url=WEBHOOK_URL)
+            webhook_registered = True
+            logging.info(f"🚀 Webhook đã được tự động kích hoạt tại: {WEBHOOK_URL}")
+        except Exception as e:
+            logging.error(f"❌ Không thể thiết lập webhook tự động: {e}")
+
 @app.on_event("startup")
 async def on_startup():
     logging.basicConfig(level=logging.INFO, stream=sys.stdout)
-    try:
-        # Ép buộc gọi set_webhook với đường dẫn chuẩn xác
-        await bot.set_webhook(url=WEBHOOK_URL)
-        logging.info(f"🚀 Webhook đã được thiết lập tự động tại: {WEBHOOK_URL}")
-    except Exception as e:
-        logging.error(f"❌ Không thể thiết lập webhook: {e}")
+    await ensure_webhook()
 
 @app.post(WEBHOOK_PATH)
 async def bot_webhook(request: Request):
     """Nhận payload từ Telegram bắn tới và chuyển vào aiogram Dispatcher"""
+    await ensure_webhook()
+    
     json_data = await request.json()
     update = types.Update(**json_data)
     await dp.feed_update(bot, update)
@@ -302,9 +311,9 @@ async def bot_webhook(request: Request):
 
 @app.get("/")
 async def index():
+    await ensure_webhook()
     return {"status": "Khophim System Webhook Bot is running smoothly!"}
 
 
 if __name__ == "__main__":
-    # Đã đổi từ "bot:app" thành "main:app" để khớp với tên file mới
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), reload=True)
