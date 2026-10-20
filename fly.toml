@@ -1,0 +1,9 @@
+app = 'khophim-system'
+primary_region = 'sin'
+
+[env]
+  PYTHONUNBUFFERED = "1"
+
+[[vm]]
+  memory = '512mb'
+  cpus = 1

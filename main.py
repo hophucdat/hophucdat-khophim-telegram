@@ -1,3 +1,4 @@
+import os
 import asyncio
 import logging
 import sys
@@ -6,14 +7,16 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from config import STREAM_BOT_TOKEN
+from fastapi import FastAPI, Request
+import uvicorn
+
 from database import DatabaseService
 
 router = Router()
 
 # Khởi tạo các trạng thái FSM cho Admin
 class AdminStates(StatesGroup):
-    choosing_action = State()           # Chọn: Thêm phim mới hay Thêm tập phim cũ
+    choosing_action = State()             # Chọn: Thêm phim mới hay Thêm tập phim cũ
     waiting_for_new_movie_title = State() # Nhập tên phim mới
     waiting_for_new_movie_desc = State()  # Nhập mô tả phim mới
     waiting_for_episode_num = State()     # Nhập số tập
@@ -127,11 +130,9 @@ async def handle_admin_video(message: types.Message, state: FSMContext):
         await message.answer("⚠️ Bạn không có quyền sử dụng tính năng này!")
         return
 
-    # Lưu file_id vào trạng thái tạm thời
     file_id = message.video.file_id
     await state.update_data(telegram_file_id=file_id)
 
-    # Hiển thị bảng lựa chọn: Tạo phim mới hay thêm vào phim cũ
     builder = InlineKeyboardBuilder()
     builder.button(text="➕ Tạo Phim Mới", callback_data="admin_action:new_movie")
     builder.button(text="📂 Thêm Vào Phim Đã Có", callback_data="admin_action:existing_movie")
@@ -174,7 +175,6 @@ async def process_admin_action(callback: types.CallbackQuery, state: FSMContext)
         )
     await callback.answer()
 
-# --- Luồng 1: Tạo Phim Mới Từ A-Z ---
 @router.message(AdminStates.waiting_for_new_movie_title)
 async def process_new_movie_title(message: types.Message, state: FSMContext):
     if message.from_user.id not in ADMIN_IDS:
@@ -213,7 +213,6 @@ async def process_new_movie_desc(message: types.Message, state: FSMContext):
     await message.answer("🔢 Vui lòng gửi **số tập** của video này (ví dụ: `1`):", parse_mode="Markdown")
     await state.set_state(AdminStates.waiting_for_episode_num)
 
-# --- Luồng 2: Chọn Phim Cũ ---
 @router.callback_query(F.data.startswith("admin_pick_movie:"))
 async def process_pick_existing_movie(callback: types.CallbackQuery, state: FSMContext):
     movie_id = int(callback.data.split(":")[1])
@@ -226,7 +225,6 @@ async def process_pick_existing_movie(callback: types.CallbackQuery, state: FSMC
     await state.set_state(AdminStates.waiting_for_episode_num)
     await callback.answer()
 
-# --- Bước Cuối: Lưu vào Database (Dùng chung cho cả 2 luồng) ---
 @router.message(AdminStates.waiting_for_episode_num)
 async def save_episode_final(message: types.Message, state: FSMContext):
     if message.from_user.id not in ADMIN_IDS:
@@ -244,7 +242,6 @@ async def save_episode_final(message: types.Message, state: FSMContext):
     movie_desc = data.get("movie_desc")
 
     try:
-        # Nếu chưa có movie_id nhưng có tên phim mới, tiến hành tạo phim mới qua DatabaseService
         if not movie_id and movie_title:
             movie_id = DatabaseService.create_movie(
                 title=movie_title,
@@ -255,7 +252,6 @@ async def save_episode_final(message: types.Message, state: FSMContext):
         if not movie_id:
             raise Exception("Không thể xác định hoặc tạo mới thông tin bộ phim.")
 
-        # Lưu tập phim vào bảng episodes
         DatabaseService.add_episode(movie_id, episode_num, telegram_file_id)
         
         target_name = movie_title if movie_title else f"ID: {movie_id}"
@@ -271,20 +267,44 @@ async def save_episode_final(message: types.Message, state: FSMContext):
     await state.clear()
 
 
-# ==================== KHỞI ĐỘNG BOT ====================
-async def main():
+# ==================== PHẦN 3: FASTAPI WEBHOOK CONFIG ====================
+
+# Ưu tiên lấy token và domain từ biến môi trường của Vercel, nếu không có sẽ lấy giá trị dự phòng
+STREAM_BOT_TOKEN = os.getenv("STREAM_BOT_TOKEN", "8493489068:AAFnFbMxQByA_96Zor86LzicWHOSRRaUa5M")
+WEBHOOK_DOMAIN = os.getenv("WEBHOOK_DOMAIN", "https://hophucdat-khophim-telegram.vercel.app")
+WEBHOOK_PATH = f"/webhook/{STREAM_BOT_TOKEN}"
+WEBHOOK_URL = WEBHOOK_DOMAIN + WEBHOOK_PATH
+
+app = FastAPI()
+
+# Khởi tạo Bot và Dispatcher dùng chung cho Webhook
+bot = Bot(token=STREAM_BOT_TOKEN)
+dp = Dispatcher()
+dp.include_router(router)
+
+@app.on_event("startup")
+async def on_startup():
     logging.basicConfig(level=logging.INFO, stream=sys.stdout)
-    
-    if not STREAM_BOT_TOKEN:
-        print("❌ Lỗi: Thiếu TOKEN trong file .env!")
-        return
+    try:
+        # Ép buộc gọi set_webhook với đường dẫn chuẩn xác
+        await bot.set_webhook(url=WEBHOOK_URL)
+        logging.info(f"🚀 Webhook đã được thiết lập tự động tại: {WEBHOOK_URL}")
+    except Exception as e:
+        logging.error(f"❌ Không thể thiết lập webhook: {e}")
 
-    bot = Bot(token=STREAM_BOT_TOKEN)
-    dp = Dispatcher()
-    dp.include_router(router)
+@app.post(WEBHOOK_PATH)
+async def bot_webhook(request: Request):
+    """Nhận payload từ Telegram bắn tới và chuyển vào aiogram Dispatcher"""
+    json_data = await request.json()
+    update = types.Update(**json_data)
+    await dp.feed_update(bot, update)
+    return {"status": "ok"}
 
-    print("🚀 Bot quản lý kho phim nâng cao đang chạy...")
-    await dp.start_polling(bot)
+@app.get("/")
+async def index():
+    return {"status": "Khophim System Webhook Bot is running smoothly!"}
+
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # Đã đổi từ "bot:app" thành "main:app" để khớp với tên file mới
+    uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), reload=True)
