@@ -126,7 +126,6 @@ async def play_episode(callback: types.CallbackQuery):
 @router.message(Command("trangchu"))
 async def menu_trang_chu(message: types.Message):
     builder = InlineKeyboardBuilder()
-    # Bạn có thể thay đổi link channel thực tế bên dưới nếu cần
     builder.button(text="📢 Ghé thăm Kênh Lịch Phim", url="https://t.me/xemphimcungdongdong")
     builder.adjust(1)
     
@@ -150,8 +149,8 @@ async def menu_goi_vip(message: types.Message):
 # 3. Donate: Hiển thị ảnh QR, STK MB Bank và lời cảm ơn
 @router.message(Command("donate"))
 async def menu_donate(message: types.Message):
-    # Bạn có thể thay thế bằng file_id ảnh QR trên Telegram hoặc đường dẫn ảnh trực tiếp
-    qr_image = "C:\Users\datho\Downloads\123.png" 
+    # Dùng file_id của Telegram hoặc link ảnh trực tuyến thay vì đường dẫn ổ C (tránh lỗi trên Vercel)
+    qr_image = "https://i.imgur.com/7aLKVAt.jpeg" 
     
     caption_text = (
         "💖 **ỦNG HỘ (DONATE) HỆ THỐNG**\n\n"
@@ -177,7 +176,6 @@ async def menu_donate(message: types.Message):
 @router.message(Command("lienhe"))
 async def menu_lien_he(message: types.Message):
     builder = InlineKeyboardBuilder()
-    # Thay 'hophucdat' bằng username Telegram thật của bạn
     builder.button(text="💬 Nhắn trực tiếp với Admin", url="https://t.me/hophucdat")
     builder.adjust(1)
     
