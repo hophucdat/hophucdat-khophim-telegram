@@ -22,7 +22,7 @@ class AdminStates(StatesGroup):
     waiting_for_episode_num = State()     # Nhập số tập
 
 
-# ==================== PHẦN 1: TÍNH NĂNG USER (XEM PHIM) ====================
+# ==================== PHẦN 1: TÍNH NĂNG USER (XEM PHIM & MENU) ====================
 
 @router.message(Command("start"))
 async def cmd_start(message: types.Message):
@@ -116,6 +116,75 @@ async def play_episode(callback: types.CallbackQuery):
     await callback.message.answer_video(
         video=episode['telegram_file_id'],
         caption=f"🎬 **{title}** - **Tập {episode['episode_num']}**\n\n🍿 Chúc bạn xem phim vui vẻ!",
+        parse_mode="Markdown"
+    )
+
+
+# --- TÍCH HỢP 4 CHỨC NĂNG MENU MỚI ---
+
+# 1. Trang Chủ: Trỏ về kênh Telegram (thông báo lịch phim chung)
+@router.message(Command("trangchu"))
+async def menu_trang_chu(message: types.Message):
+    builder = InlineKeyboardBuilder()
+    # Bạn có thể thay đổi link channel thực tế bên dưới nếu cần
+    builder.button(text="📢 Ghé thăm Kênh Lịch Phim", url="https://t.me/xemphimcungdongdong")
+    builder.adjust(1)
+    
+    await message.answer(
+        "🏠 **TRANG CHỦ & THÔNG BÁO**\n\n"
+        "Nhấn vào nút bên dưới để tham gia kênh chính thức, xem lịch chiếu phim mới nhất và các thông báo quan trọng từ hệ thống!",
+        reply_markup=builder.as_markup(),
+        parse_mode="Markdown"
+    )
+
+# 2. Gói VIP: Hiển thị trạng thái Coming Soon
+@router.message(Command("goivip"))
+async def menu_goi_vip(message: types.Message):
+    await message.answer(
+        "💎 **GÓI VIP THÀNH VIÊN**\n\n"
+        "🚀 Tính năng này đang được phát triển và sẽ sớm ra mắt trong thời gian tới (**Coming Soon**).\n"
+        "Hãy theo dõi kênh thông báo để không bỏ lỡ những quyền lợi đặc biệt nhé!",
+        parse_mode="Markdown"
+    )
+
+# 3. Donate: Hiển thị ảnh QR, STK MB Bank và lời cảm ơn
+@router.message(Command("donate"))
+async def menu_donate(message: types.Message):
+    # Bạn có thể thay thế bằng file_id ảnh QR trên Telegram hoặc đường dẫn ảnh trực tiếp
+    qr_image = "C:\Users\datho\Downloads\123.png" 
+    
+    caption_text = (
+        "💖 **ỦNG HỘ (DONATE) HỆ THỐNG**\n\n"
+        "Cảm ơn bạn rất nhiều vì đã đồng hành và ủng hộ Kho Phim! Sự đóng góp của bạn là động lực lớn để hệ thống duy trì và phát triển thêm nhiều nội dung hay hơn nữa.\n\n"
+        "🏦 **Thông tin chuyển khoản:**\n"
+        "• Ngân hàng: MB Bank\n"
+        "• Số tài khoản: `0362010575`\n"
+        "• Chủ tài khoản: HO PHUC DAT\n\n"
+        "🙏 Chúc bạn xem phim thật vui vẻ!"
+    )
+    
+    try:
+        await message.answer_photo(
+            photo=qr_image,
+            caption=caption_text,
+            parse_mode="Markdown"
+        )
+    except Exception:
+        # Fallback gửi dạng text nếu chưa cấu hình đúng file_id ảnh QR
+        await message.answer(caption_text, parse_mode="Markdown")
+
+# 4. Liên Hệ: Chuyển đến profile Telegram của bạn
+@router.message(Command("lienhe"))
+async def menu_lien_he(message: types.Message):
+    builder = InlineKeyboardBuilder()
+    # Thay 'hophucdat' bằng username Telegram thật của bạn
+    builder.button(text="💬 Nhắn trực tiếp với Admin", url="https://t.me/hophucdat")
+    builder.adjust(1)
+    
+    await message.answer(
+        "📞 **LIÊN HỆ QUẢN TRỊ VIÊN**\n\n"
+        "Bạn cần hỗ trợ, báo lỗi phim hỏng hoặc có ý kiến đóng góp? Hãy bấm vào nút bên dưới để trò chuyện trực tiếp với tôi nhé!",
+        reply_markup=builder.as_markup(),
         parse_mode="Markdown"
     )
 
